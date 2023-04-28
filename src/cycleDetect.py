@@ -1,29 +1,40 @@
-
-
+from dnp3_dissector import *
+from scapy.all import *
+import sys
+import time
+import csv
 
 # 1.) Multiplexer: 
 # Input:  (.pcap) file
 # Output: (list) shortLived_flows  - Connections (< 1 sec) grouped by (IP Protocol, Server Port, Client Address) 
 #         (list) longLived_flows - Connections grouped by (IP Protocol, Server Port, Client Address, Client Port)
-
+def multiplexer(pcapFile):
+    shortLived_flows = []
+    longLived_flows = []
+    pktNumber = 0
+    
+    for p in PcapReader(pcapFile):
+        pktNumber += 1
+        if IP in p:
+            longLived_flows.append( ("IP", ))
+        
+    return 
 
 # 2.) Tokenizer: 
 # Input:  (.pcap) file 
 #         (list) shortLived_flows and longLived_flows
-# Output: (dict) tokenized_shortLived_flows -  [Key]: (tuple) Flow, [Value]: (list of tuple) List of tokenized packets in this flow
-#         (dict) tokenized_longLived_flows -  [Key]: (tuple) Flow, [Value]: (list of tuple) List of tokenized packets in this flow
+# Output: (dict) tokenized_shortLived_flows - [Key]: (tuple) Flow, [Value]: (list of tuple) List of tokenized packets in this flow
+#         (dict) tokenized_longLived_flows - [Key]: (tuple) Flow, [Value]: (list of tuple) List of tokenized packets in this flow
 #             Request:
 #                Tuple - (timestamp, messageIdentifier, pathIdentifier)
 #             Response: 
 #                Tuple - (timestamp, pathIdentifier)
+def tokenizer(pcapFile, shortLived_flows, longLived_flows):
+    return
 
-
-
-
-# Algorithm 1. Learner module algorithm.
-#Input: A tokenized flow and parameters N; ε; dur_thr
-#Output: A list of tuples (request set, dur_min; dur_max; dur_std)
-
+# 3.) Learner:
+# Input: A tokenized flow and parameters N; ε; dur_thr
+# Output: A list of tuples (request set, dur_min; dur_max; dur_std)
 # Step 1: group requests
 # count request occurrences;
 #     group requests with same counter  + or - ε;
