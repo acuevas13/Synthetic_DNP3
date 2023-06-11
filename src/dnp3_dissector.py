@@ -660,6 +660,29 @@ class ApplicationResponse(Packet):
             return  SelectDataClass
         return Packet.guess_payload_class(self, payload)
 
+class ApplicationRequest(Packet):
+    name = "Application Request"
+    fields_desc = [
+        ByteField("Object0", None),
+        ByteField("Var0", None),
+        PacketField("QualiferField0", DataObjectQualifer(),
+                    DataObjectQualifer),
+        ByteField("Object1", None),
+        ByteField("Var1", None),
+        PacketField("QualiferField1", DataObjectQualifer(),
+                    DataObjectQualifer),
+        ByteField("Object2", None),
+        ByteField("Var2", None),
+        PacketField("QualiferField2", DataObjectQualifer(),
+                    DataObjectQualifer),
+        ByteField("Object3", None),
+        ByteField("Var3", None),
+        PacketField("QualiferField3", DataObjectQualifer(), DataObjectQualifer),
+    ]
+    
+    def guess_payload_class(self, payload):
+        return Packet.guess_payload_class(self, payload)
+
 class ApplicationLayer(Packet):
     name = "Application Layer"
     fields_desc = [
@@ -692,6 +715,8 @@ class ApplicationLayer(Packet):
     def guess_payload_class(self, payload):
         if self.Function_Code == 129:
             return ApplicationResponse
+        elif self.Function_Code == 1:
+            return ApplicationRequest
         return Packet.guess_payload_class(self, payload)
 
 
