@@ -51,18 +51,16 @@ applicationFunctCodes = {
 }
 
 
-
-def getRequestType(p):    
-    if ApplicationRequest in p:
+def getRequestType(pkt):    
+    if ApplicationRequest in pkt:
         requestID = ""
         for i in range(4):
-            obj = p[ApplicationRequest].getfieldval("Object" + str(i))
-            var = p[ApplicationRequest].getfieldval("Var" + str(i))
+            obj = pkt[ApplicationRequest].getfieldval("Object" + str(i))
+            var = pkt[ApplicationRequest].getfieldval("Var" + str(i))
             if obj and var:
                 requestID += classDataObjectCodes[(obj, var)]
         return ''.join(sorted(requestID))
 
-    
 
 # 1.) Multiplexer: 
 # Input:  (.pcap) file
@@ -104,6 +102,7 @@ def multiTokenizer(pcapFile):
                 # Unsolicited Response
                 if msgType == "response":
                     unsolicitedResponses.append(pktNumber)
+                    
                 # Request/Confirm/Etc 
                 else:
                     if msgType == "read":
@@ -151,9 +150,88 @@ def multiTokenizer(pcapFile):
 #     end
 # end
 
+# Input: N_identical_cycles - List of at least N identical candiates cycle. Each candiate cycle is a list
+def getCandidateDurations(lst_N_identical_candidates, pktsInGroup):
+    lst_stats = []
+    for n_ident_candiates in lst_N_identical_candidates:
+        all_durations = []
+        for i in range(1, len(n_ident_candiates)):
+            idx1, idx2 = n_ident_candiates[i - 1][0], n_ident_candiates[i][0]
+            t1, t2 = pktsInGroup[idx1][0], pktsInGroup[idx2][0]
+            duration = t2 - t1
+            all_durations.append(duration)
+            
+        min_dur, max_dur, std_dur = min(all_durations), max(all_durations), -1
+        if len(all_durations) >= 2:
+            std_dur = statistics.stdev(all_durations)
+        
+        print(f"all_durations: {all_durations}")
+        print(f"min: {min_dur}, max: {max_dur}, std: {std_dur}\n")
+        lst_stats.append((min_dur, max_dur, std_dur, n_ident_candiates))
+    
+    return lst_stats
+
+
+
+def find_candidate_cycles(pktsInGroup, N, dur_thr):
+    candidate_cycles = []
+    current_cycle = []
+
+    # Find canidate cycles, each with unique msgs 
+    for i, pkt in enumerate(pktsInGroup):
+        msgType = pkt[2]
+        
+        if not current_cycle:
+            current_cycle.append((msgType, i))
+            continue
+
+        for tup in current_cycle:
+            if msgType in tup:
+                candidate_cycles.append(current_cycle)
+                current_cycle = []
+                break
+            
+        current_cycle.append((msgType, i))
+
+    if current_cycle:
+        candidate_cycles.append(current_cycle)
+        
+    print(f"candidate_cycles: {candidate_cycles}")
+    
+    # Continue search until candidate_cycles w/ N identical
+    # for subset in itertools.combinations(group, len(group)):
+    groups = {}
+    for lst in candidate_cycles:
+        indexes = []
+        key = ""
+        for msg in lst:
+            key += msg[0]
+            indexes.append(msg[1])         
+
+        key = ''.join(sorted(key))
+
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(indexes)
+
+    N_identical_candidates = [lst for lst in groups.values() if len(lst) >= N]
+    print(f"N_identical_candidates: {N_identical_candidates}")
+    
+    # Verify Timing
+    result = []
+    lst_stats = getCandidateDurations(N_identical_candidates, pktsInGroup)
+    for s in lst_stats:
+        min_dur, max_dur = s[0], s[1]
+        if max_dur - min_dur < dur_thr:
+            result.append(s)
+
+    return result
 
 def find_periodic_requests(tokenized_flow, N, epsilon, dur_thr):
     request_occurrences = {}
+    non_periodic = []
+    
+    # Find frequency of each msg type
     for pkt in tokenized_flow:
         msgType = pkt[2]
         if not msgType:
@@ -164,31 +242,48 @@ def find_periodic_requests(tokenized_flow, N, epsilon, dur_thr):
             request_occurrences[msgType] = 1
     print(f"request_occurrences: {request_occurrences}\n")
 
-    # result = []
-    # for counter in request_occurrences.values():
-    #     group = [request for request, count in request_occurrences.items() if count >= counter - epsilon and count <= counter + epsilon]
-    #     for subset in itertools.combinations(group, counter):
-    #         candidates = []
-    #         for request in subset:
-    #             candidates.extend([request] * N)
-
-    #         dur_min = min(candidates)
-    #         dur_max = max(candidates)
-    #         if dur_max - dur_min < dur_thr:
-    #             dur_std = statistics.stdev(candidates)
-    #             result.append((subset, dur_min, dur_max, dur_std))
-    #             continue
-
-    # return result
+    result = []
+    for counter in request_occurrences.values():
+        # Group by msg types that are within epilon frequency
+        group = [request for request, count in request_occurrences.items() if count >= counter - epsilon and count <= counter + epsilon]
+        print(f"group: {group}")
+        
+        # Filter by pkts that are in group 
+        pktsInGroup = [pkt for pkt in tokenized_flow if pkt[2] in group]
+        
+        # Find candiate cycles with no duplicates
+        verifed_cycles = find_candidate_cycles(pktsInGroup, N, dur_thr)
+     
+        # Declare non-eligible pkts as non-periodic
+        if not verifed_cycles:
+            non_periodic.append(pktsInGroup)
+        
+        result.append(verifed_cycles)
+               
+    print(f"result: {result}")
+    print()
+    return result
 
     
 if __name__ == '__main__':
     # pcapFile = "/data/netgen/B/testB2-1300-filtered.pcap"
     # pcapFile = "/data/netgen/siabmgrA5/siabmgrA5-20191030-174849.pcap"
-
     pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
     # pcapFile = "../B/siabmgrA5-20191030-174849.pcap"
-    tokenized = multiTokenizer(pcapFile)
+    
+    # tokenized = multiTokenizer(pcapFile)
+    
+    # Test 0
+    key = ('172.28.2.10', 1389, '172.28.2.20', 20000)
+    val = [(1572267718.936242, 8, 'read123', 0), (1572267724.925966, 41, 'read123', 7), (1572267724.941265, 45, 'confirm', 8), (1572267730.925625, 75, 'read0123', 14), (1572267731.941265, 80, 'confirm', 80),
+           (1572267732.925625, 100, 'read0123', 100), (1572267730.925301, 103, 'read123', 20), (1572267735.925044, 131, 'read123', 26), (1572267741.924758, 153, 'read123', 31), (1572267754.924484, 175, 'read0123', 36)]
+    tokenized = {key: val}
+    
+    # Test 1
+    # key = ('172.28.2.10', 1389, '172.28.2.20', 20000)
+    # val = tokenized[key]
+    # tokenized = {key: val} 
+    
     for flow, tokenized_flow in tokenized.items():
         N = 2
         epsilon = 1
