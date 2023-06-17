@@ -107,7 +107,7 @@ def multiTokenizer(pcapFile):
                 else:
                     if msgType == "read":
                         msgType += getRequestType(p)
-                    token = (p.time, msgID, msgType, pairID)
+                    token = (float(p.time), msgID, msgType, pairID)
                     tokenized_longLived_flows[tup].append(token)
                     
                     unPairedDSTs[tup2] = (tup, pairID)
@@ -116,7 +116,7 @@ def multiTokenizer(pcapFile):
                 # Response
                 if msgType == "response":
                     (tup2, pastPairID) = unPairedDSTs[tup]
-                    token = (p.time, msgID, msgType, pastPairID)
+                    token = (float(p.time), msgID, msgType, pastPairID)
                     tokenized_longLived_flows[tup].append(token)
                     del unPairedDSTs[tup]
                 else:
@@ -129,26 +129,6 @@ def multiTokenizer(pcapFile):
 # 3.) Learner:
 # Input: A tokenized flow and parameters N; ε; dur_thr
 # Output: A list of tuples (request set, dur_min; dur_max; dur_std)
-# Step 1: group requests
-# count request occurrences;
-#     group requests with same counter  + or - ε;
-#     for each group do
-#         for each subset in group do
-#             # Step 2: find candidates n/
-#             for each request in subset do
-#                 candidates’N repeating cycles;
-#                 # Step 3: test candidates n/
-#                 dur_min; dur_max <- minimum and maximum candidate durations;
-#                 if dur_max - dur_min < dur_thr
-#                     dur_std <- cycle duration standard deviation;
-#                     store (request set, dur_min; dur_max; dur_std);
-#                     continue to next subset;
-#                 else
-#                     reset candidates;
-#             end
-#             ignore remaining subset requests as non-periodic;
-#     end
-# end
 
 # Input: N_identical_cycles - List of at least N identical candiates cycle. Each candiate cycle is a list
 def getCandidateDurations(lst_N_identical_candidates, pktsInGroup):
@@ -166,7 +146,8 @@ def getCandidateDurations(lst_N_identical_candidates, pktsInGroup):
             std_dur = statistics.stdev(all_durations)
         
         print(f"all_durations: {all_durations}")
-        print(f"min: {min_dur}, max: {max_dur}, std: {std_dur}\n")
+        print(
+            f"min: {min_dur}, max: {max_dur}, std: {std_dur}, avg: {statistics.mean(all_durations)}\n")
         lst_stats.append((min_dur, max_dur, std_dur, n_ident_candiates))
     
     return lst_stats
@@ -176,7 +157,8 @@ def getCandidateDurations(lst_N_identical_candidates, pktsInGroup):
 def find_candidate_cycles(pktsInGroup, N, dur_thr):
     candidate_cycles = []
     current_cycle = []
-
+    print(f"pktsInGroup: {pktsInGroup}")
+    
     # Find canidate cycles, each with unique msgs 
     for i, pkt in enumerate(pktsInGroup):
         msgType = pkt[2]
@@ -218,14 +200,14 @@ def find_candidate_cycles(pktsInGroup, N, dur_thr):
     print(f"N_identical_candidates: {N_identical_candidates}")
     
     # Verify Timing
-    result = []
     lst_stats = getCandidateDurations(N_identical_candidates, pktsInGroup)
-    for s in lst_stats:
-        min_dur, max_dur = s[0], s[1]
-        if max_dur - min_dur < dur_thr:
-            result.append(s)
+    # result = []
+    # for s in lst_stats:
+    #     min_dur, max_dur = s[0], s[1]
+    #     if max_dur - min_dur < dur_thr:
+    #         result.append(s)
 
-    return result
+    return lst_stats
 
 def find_periodic_requests(tokenized_flow, N, epsilon, dur_thr):
     request_occurrences = {}
@@ -268,29 +250,37 @@ def find_periodic_requests(tokenized_flow, N, epsilon, dur_thr):
 if __name__ == '__main__':
     # pcapFile = "/data/netgen/B/testB2-1300-filtered.pcap"
     # pcapFile = "/data/netgen/siabmgrA5/siabmgrA5-20191030-174849.pcap"
-    pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
-    # pcapFile = "../B/siabmgrA5-20191030-174849.pcap"
-    
-    # tokenized = multiTokenizer(pcapFile)
+    # pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
+    pcapFile = "../B/siabmgrA5-20191030-174849.pcap"
+    t1 = time.time()
+    tokenized = multiTokenizer(pcapFile)
+    print(f"Tokenize Time: {time.time()-t1}")
     
     # Test 0
-    key = ('172.28.2.10', 1389, '172.28.2.20', 20000)
-    val = [(1572267718.936242, 8, 'read123', 0), (1572267724.925966, 41, 'read123', 7), (1572267724.941265, 45, 'confirm', 8), (1572267730.925625, 75, 'read0123', 14), (1572267731.941265, 80, 'confirm', 80),
-           (1572267732.925625, 100, 'read0123', 100), (1572267730.925301, 103, 'read123', 20), (1572267735.925044, 131, 'read123', 26), (1572267741.924758, 153, 'read123', 31), (1572267754.924484, 175, 'read0123', 36)]
-    tokenized = {key: val}
+    # key = ('172.28.2.10', 1389, '172.28.2.20', 20000)
+    # val = [(1572267718.936242, 8, 'read123', 0), (1572267724.925966, 41, 'read123', 7), (1572267724.941265, 45, 'confirm', 8), (1572267730.925625, 75, 'read0123', 14), (1572267731.941265, 80, 'confirm', 80),
+    #        (1572267732.925625, 100, 'read0123', 100), (1572267730.925301, 103, 'read123', 20), (1572267735.925044, 131, 'read123', 26), (1572267741.924758, 153, 'read123', 31), (1572267754.924484, 175, 'read0123', 36)]
+    # tokenized = {key: val}
     
-    # Test 1
+    # Test 1 - 1300
     # key = ('172.28.2.10', 1389, '172.28.2.20', 20000)
     # val = tokenized[key]
     # tokenized = {key: val} 
     
+    # Test 2 - A5_1030
+    # key = ('172.27.5.11', 47292, '172.27.5.23', 20000)
+    # val = tokenized[key]
+    # tokenized = {key: val}
+
+    t1 = time.time()
     for flow, tokenized_flow in tokenized.items():
         N = 2
         epsilon = 1
         dur_thr = 1
-        print(f"Flow: {flow}")
+        print(f"----------------============= Flow: {flow} =============----------------")
         find_periodic_requests(tokenized_flow, N, epsilon, dur_thr)
         # print(f"Flow: {flow}, len: {len(listOfTokens)}")
         # for t in listOfTokens:
         #     print(f"    ts: {t[0]}, msgID: {t[1]}, pairID: {t[2]}")
         # print()
+    print(f"Learner Time: {time.time()-t1}")
