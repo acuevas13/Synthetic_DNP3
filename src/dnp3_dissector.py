@@ -1,4 +1,5 @@
 from scapy.all import *
+import crcmod.predefined
 
 DNP3_PORT_NUMBER = 20000
 DNP3_START_BYTES = 0x0564
@@ -151,6 +152,19 @@ bitEnum = {
     1: "set"
 }
 
+
+def crc16DNP(data):
+    crc16_fn = crcmod.predefined.mkPredefinedCrcFun('crc-16-dnp')
+    crcINT = crc16_fn(data)
+    print(f"crcINT: {crcINT}")
+    crcSTR = str(crc16_fn(data))
+    print(f"crcSTR!!!: {crcSTR}")
+
+    crcBytes = crcINT.to_bytes((crcINT.bit_length() + 7) // 8, "big")
+    print(f"crcBytes: {crcBytes}")
+    return crcBytes
+
+
 class ApplicationSelectControlCode(Packet):
     name = "Application Control Code"
     fields_desc = [
@@ -224,7 +238,7 @@ class BinaryInputQualityFlags(Packet):
     fields_desc = [
         BitField("Point_Value", None, 1),
         BitEnumField("reserved", UNSET, 1, bitEnum),
-        BitEnumField("Chatter Filter", UNSET, 1, bitEnum),
+        BitEnumField("Chatter_Filter", UNSET, 1, bitEnum),
         BitEnumField("Local_Force", UNSET, 1, bitEnum),
         BitEnumField("Remote_Force", UNSET, 1, bitEnum),
         BitEnumField("Comm_Fail", UNSET, 1, bitEnum),
@@ -256,7 +270,7 @@ class AnalogInputQualityFlags(Packet):
     fields_desc = [
         BitEnumField("reserved", UNSET, 1, bitEnum),
         BitEnumField("Reference_Check", UNSET, 1, bitEnum),
-        BitEnumField("Over-Range", UNSET, 1, bitEnum),
+        BitEnumField("Over_Range", UNSET, 1, bitEnum),
         BitEnumField("Local_Force", UNSET, 1, bitEnum),
         BitEnumField("Remote_Force", UNSET, 1, bitEnum),
         BitEnumField("Comm_Fail", UNSET, 1, bitEnum),
@@ -759,6 +773,95 @@ class DNP3(Packet):
         XShortField("crc", None),
     ]
     
+    data_chunks = []  # Data Chunks are 16 octets
+    data_chunks_crc = []
+    # chunk_len = 18
+    data_chunk_len = 16
+
+    def show_data_chunks(self):
+        for i in range(len(self.data_chunks)):
+            print("\tData Chunk", i, "Len", len(self.data_chunks[i]), "CRC (", hex(struct.unpack('<H', self.data_chunks_crc[i])[0]), ")")
+
+    def add_check_sum(self, chunk):
+        checkSum = crc16DNP(chunk)
+        print(f"ADD CRC \n chunk: {type(chunk)}:{chunk}\n, checkSum: {type(checkSum)}:{checkSum}")
+        self.data_chunks.append(chunk)
+        self.data_chunks_crc.append(checkSum)
+
+    def post_dissect(self, s: bytes):
+        print(f"s: {s}")
+        return s
+    
+    def post_build(self, pkt, pay):
+        if len(pkt) <= 8:
+            return pkt
+
+        dataLinkHeader = pkt[:8]
+        dataLinkHeaderChecksum = crc16DNP(dataLinkHeader)  # use only the first 8 octets
+        finalPkt = dataLinkHeader + dataLinkHeaderChecksum
+        print(f"dataLinkHeader: {dataLinkHeader}")
+        print(f"dataLinkHeaderChecksum: {dataLinkHeaderChecksum}")
+        print(f"finalPkt: {finalPkt}")
+        
+        dnp3PKT = pkt[8:]
+        cnk_len = self.data_chunk_len
+        pay_len = len(pay)
+        pkt_len = len(dnp3PKT)
+        total = pkt_len + pay_len
+        chunks = total // cnk_len  # chunk size
+        last_chunk = total % cnk_len
+        
+        if last_chunk > 0:
+            chunks += 1
+        
+        print(f"dnp3PKT: {dnp3PKT}")
+        print(f"pay_len: {pay_len}")
+        print(f"pkt_len: {pkt_len}")
+        print(f"total: {total}")
+        print(f"chunks: {chunks}")
+        print(f"last_chunk: {last_chunk}")
+
+        # if pay_len == 3 and self.control.DIR == MASTER:
+        #     # No IIN in Application layer and empty Payload
+        #     pay = pay + struct.pack('H', crc16DNP(pay))
+
+        # if pay_len == 5 and self.control.DIR == OUTSTATION:
+        #     # IIN in Application layer and empty Payload
+        #     pay = pay + struct.pack('H', crc16DNP(pay))
+
+        # if self.length is None:
+        #     # Remove length , crc, start octets as part of length
+        #     length = (len(dnp3PKT+pay) - ((chunks * 2) + 1 + 2 + 2))
+        #     dnp3PKT = dnp3PKT[:2] + struct.pack('<B', length) + dnp3PKT[3:]
+        
+        self.data_chunks = []
+        self.data_chunks_crc = []
+
+        remaining_pay = pay_len
+        print(f"pay_len: {pay_len}")
+        print(f"chunks: {chunks}")
+        for c in range(chunks):
+            index = c * cnk_len  # data chunk
+            print(
+                f"c: {c}, cnk_len: {cnk_len}, index: {index}, dnp3PKT[index:]:{dnp3PKT[index:]}")
+
+            if (remaining_pay < cnk_len) and (remaining_pay > 0):
+                self.add_check_sum(dnp3PKT[index:])
+                break  # should be the last chunk
+            else:
+                self.add_check_sum(dnp3PKT[index:index + cnk_len])
+                remaining_pay -= cnk_len
+
+        payload = bytearray()
+        for chunk in range(len(self.data_chunks)):
+            print(f"self.data_chunks[chunk]: {self.data_chunks[chunk]}")
+            print(f"self.data_chunks_crc[chunk]: {self.data_chunks_crc[chunk]}")
+            payload = payload + self.data_chunks[chunk] + self.data_chunks_crc[chunk]
+        self.show_data_chunks()  # --DEBUGGING
+        print(f"final: \n dnp3PKT: {dnp3PKT}, payload: {payload}, dnp3PKT+payload: {dnp3PKT+payload}")
+        finalPkt += payload
+        return finalPkt
+        
     def guess_payload_class(self, payload):
         if len(payload) == 0:
             return Packet.guess_payload_class(self, payload)
