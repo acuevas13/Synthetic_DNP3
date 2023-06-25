@@ -27,25 +27,25 @@ print(f"read1")
 read1.show()
 print()
 
-# # Response 1
-# response1 = getPacket(pcapFile, 10)
-# pcapList.append(response1)
-# print(f"response1")
-# response1.show()
-# print()
+# Response 1
+response1 = getPacket(pcapFile, 10)
+pcapList.append(response1)
+print(f"response1")
+response1.show()
+print()
 
-# # Read 2
-# read2[IP].id = read1[IP].id + 1
+# Read 2
+read2[IP].id = read1[IP].id + 1
 
-# lastLength = len(response1[DNP3]) + 2
+lastLength = len(response1[DNP3]) + 2
 
-# ackTemp = response1[IP].ack
-# read2[IP].ack = response1[IP].seq + lastLength
-# read2[IP].seq = ackTemp
+ackTemp = response1[IP].ack
+read2[IP].ack = response1[IP].seq + lastLength
+read2[IP].seq = ackTemp
 
-# pcapList.append(read2)
-# print(f"read2")
-# read2.show()
-# print()
+pcapList.append(read2)
+print(f"read2")
+read2.show()
+print()
 
 wrpcap("scada_traffic.pcap", pcapList)

@@ -85,16 +85,32 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, IP_ID, sport, dport, tV
     # DNP3
     dataLinkControl = DataLinkLayerControl(DIR=direction_DL_BIT, PRM=primary_DL_BIT, funcation_code_primary=funcCode_PRM)
 
-    dnp3_layer = DNP3(start=DNP3_START, length=17, control=dataLinkControl, destination=dst_dnp3, source=src_dnp3)
+    dnp3_layer = DNP3(start=DNP3_START, control=dataLinkControl, destination=dst_dnp3, source=src_dnp3)
     
     transport_layer = TransportControl(final=1, first=1, sequence=transSeq)
     
     appControl = ApplicationControl(final=1, first=1, confirm=confirm_flag, unsolicited=0, sequence=appSeq)
-    application_layer = ApplicationLayer(Application_Control=appControl, Function_Code=funcCode)
     
-    qualiferField = DataObjectQualifer(reserved=0, PrefixCode=0, RangeCode=6)
-    applicationRequest_layer = ApplicationRequest(Object0=60, Var0=2, QualiferField0=qualiferField, Object1=60, Var1=3, QualiferField1=qualiferField, Object2=60, Var2=4, QualiferField2=qualiferField)
-    
+    application_layer = None
+    appRequest_layer = None
+    if funcCode and funcCode == 1:
+        qualiferField = DataObjectQualifer(reserved=0, PrefixCode=0, RangeCode=6)
+        appRequest_layer = ApplicationRequest(Object0=60,
+                                              Var0=2,
+                                              QualiferField0=qualiferField,
+                                              Object1=60,
+                                              Var1=3,
+                                              QualiferField1=qualiferField,
+                                              Object2=60,
+                                              Var2=4,
+                                              QualiferField2=qualiferField)
+        application_layer = ApplicationLayer(Application_Control=appControl, Function_Code=funcCode) / appRequest_layer
+
+    elif funcCode and funcCode == 129:
+        application_layer = ApplicationLayer(Application_Control=appControl, 
+                                             Function_Code=funcCode, 
+                                             Internal_Indications=ApplicationInternalIndications())
+
     # TCP
     tcpOptions = [('NOP', None), ('NOP', None), ('Timestamp', (tValue, tEcho))]
     tcp_layer = TCP(sport=sport, dport=dport, seq=seq_TCP, ack=ack_TCP, dataofs=TCP_HEADER_LEN, flags=flags_TCP, options=tcpOptions)
@@ -106,7 +122,7 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, IP_ID, sport, dport, tV
     ether_layer = Ether(src=src_mac, dst=dst_mac)
     
     # Assemble Packet
-    packet = ether_layer / ip_layer/ tcp_layer / dnp3_layer / transport_layer / application_layer / applicationRequest_layer
+    packet = ether_layer / ip_layer/ tcp_layer / dnp3_layer / transport_layer / application_layer
    
     packet.show()
     return packet
@@ -122,29 +138,26 @@ RELAY_mac = '00:90:4f:e5:38:a1'
 RELAY_PORT = 20000
 RELAY_DNP3_ADDR = 1
 
-start_IP_ID = 61353
-CURR_IP_ID = start_IP_ID
-
-read1_tvalue = 351402
-read1_techo = 175674600
-
+IP_IDs = {(RTU_IP, RELAY_IP): 61352, (RELAY_IP, RTU_IP): 1726}
 startSeq_TCP = 2216652531
-currSeq_TCP = startSeq_TCP
 startAck_TCP = 3242157396
-currACK_TCP = startAck_TCP
-
-startTransportControlSeq_DNP3 = 50
-currTransSeq_DNP3 = startTransportControlSeq_DNP3
-
+transControlSeqs = {(RTU_IP, RELAY_IP): 49, (RELAY_IP, RTU_IP):41}
 startAppSeq = 5
-currAppSeq = startAppSeq
 
 # Read 1 (pkt:8,1300)
+IP_IDs[(RTU_IP, RELAY_IP)] += 1
+read1_tvalue = 351402
+read1_techo = 175674600
+currSeq_TCP = startSeq_TCP
+currACK_TCP = startAck_TCP
+transControlSeqs[(RTU_IP, RELAY_IP)] +=1
+currAppSeq = startAppSeq
+
 read1 = create_DNP3_packet(src_mac=RTU_mac,
                            dst_mac=RELAY_mac,
                            src_IP=RTU_IP,
                            dst_IP=RELAY_IP,
-                           IP_ID=CURR_IP_ID,
+                           IP_ID=IP_IDs[(RTU_IP, RELAY_IP)],
                            sport=RTU_PORT,
                            dport=RELAY_PORT,
                            tValue=read1_tvalue,
@@ -155,11 +168,43 @@ read1 = create_DNP3_packet(src_mac=RTU_mac,
                            dst_dnp3=RELAY_DNP3_ADDR,
                            funcCode=appFuncCodes["read"],
                            funcCode_PRM=prmFuncCodes["unconfirmed_user_data"],
-                           transSeq=currTransSeq_DNP3,
+                           transSeq=transControlSeqs[(RTU_IP, RELAY_IP)],
                            confirm_flag=0,
                            appSeq=currAppSeq)
     
+# Response 1 (pkt:10,1300)
+IP_IDs[(RELAY_IP, RTU_IP)]+=1 
+resp1_tvalue = 175680610
+resp1_techo = 351402
 
-pcapList = []
-pcapList.append(read1)
+lastLength = len(read1[DNP3])
+ackTemp = read1[IP].ack
+currACK_TCP = read1[IP].seq + lastLength
+currSeq_TCP = ackTemp
+
+transControlSeqs[(RELAY_IP, RTU_IP)] += 1
+cycleDone = False
+if cycleDone:
+    currAppSeq += 1
+
+resp1 = create_DNP3_packet(src_mac=RELAY_mac,
+                           dst_mac=RTU_mac,
+                           src_IP=RELAY_IP,
+                           dst_IP=RTU_IP,
+                           IP_ID=IP_IDs[(RELAY_IP, RTU_IP)],
+                           sport=RELAY_PORT,
+                           dport=RTU_PORT,
+                           tValue=resp1_tvalue,
+                           tEcho=resp1_techo,
+                           seq_TCP=currSeq_TCP,
+                           ack_TCP=currACK_TCP,
+                           src_dnp3=RELAY_DNP3_ADDR,
+                           dst_dnp3=RTU_DNP3_ADDR,
+                           funcCode=appFuncCodes["response"],
+                           funcCode_PRM=prmFuncCodes["unconfirmed_user_data"],
+                           transSeq=transControlSeqs[(RELAY_IP, RTU_IP)],
+                           confirm_flag=0,
+                           appSeq=currAppSeq)
+
+pcapList = [read1, resp1]
 wrpcap("scada_traffic.pcap", pcapList)

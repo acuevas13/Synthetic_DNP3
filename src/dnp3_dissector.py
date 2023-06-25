@@ -800,12 +800,17 @@ class DNP3(Packet):
     def post_build(self, pkt, pay):
         if len(pkt) <= 8:
             return pkt
-
+        
         print(f"POST_BUILD")
         print(f"pkt: {pkt}")
         print(f"pay: {pay}")
         dataLinkHeader = pkt[:8]
-        dataLinkHeaderChecksum = crc16DNP(dataLinkHeader)  # use only the first 8 octets
+        print(f"dataLinkHeader: {dataLinkHeader}")
+        # Set Length
+        if not self.length:
+            length = (len(pay) + 5)
+            dataLinkHeader = dataLinkHeader[:2] + struct.pack('<B', length) + dataLinkHeader[3:]    
+        dataLinkHeaderChecksum = crc16DNP(dataLinkHeader)
         finalPkt = dataLinkHeader + dataLinkHeaderChecksum
         print(f"dataLinkHeader: {dataLinkHeader}")
         print(f"dataLinkHeaderChecksum: {dataLinkHeaderChecksum}")
