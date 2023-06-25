@@ -758,10 +758,10 @@ class DataLinkLayerControl(Packet):
         BitEnumField("PRM", MASTER, 1, deviceTypeEnum),
         ConditionalField(BitEnumField("FCB", 0, 1, bitEnum), lambda x:x.PRM == MASTER),
         ConditionalField(BitEnumField("FCV", 0, 1, bitEnum), lambda x:x.PRM == MASTER),
-        ConditionalField(BitEnumField("funcation_code_primary", 4, 4, primaryFunctCodes), lambda x:x.PRM == MASTER),
         ConditionalField(BitEnumField("reserved", 0, 1, bitEnum), lambda x:x.PRM == OUTSTATION),
         ConditionalField(BitEnumField("DFC", 0, 1, bitEnum), lambda x:x.PRM == OUTSTATION),
-        ConditionalField(BitEnumField("funcation_code_secondary", 4, 4, secondaryFunctCodes), lambda x:x.PRM == OUTSTATION),
+        ConditionalField(BitEnumField("funcation_code_primary", 4, 4, primaryFunctCodes), lambda x:x.PRM == MASTER),
+        # ConditionalField(BitEnumField("funcation_code_secondary", 4, 4, secondaryFunctCodes), lambda x:x.PRM == OUTSTATION),
     ]
 
     def extract_padding(self, p):
