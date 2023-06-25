@@ -35,28 +35,61 @@ def calculate_checksum(data):
         checksum += byte
     return checksum & 0xFFFF
 
+
+def getPacket(pcapFile, pktID):
+    packet = None
+    pktNum = 0
+    for p in PcapReader(pcapFile):
+        pktNum += 1
+        print(pktNum)
+        if pktNum == pktID:
+            if ApplicationLayer in p:
+                packet = p
+                p.show()
+                # return p
+                break
+    return packet
+
+
 def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_status):
     # Construct the packet with necessary layers
-    pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
+    # pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
+    pcapFile = "/data/netgen/B/siabmgrB2-1300-filtered.pcap"
     # packet = Ether()/IP()/TCP()/DNP3()/TransportControl()/ApplicationLayer()
     
     packet = None
+    pktNum = 0
     for p in PcapReader(pcapFile):
-        if ApplicationLayer in p:
-            packet = p
-            p.show()
-            # return p
-            break
+        pktNum+=1
+        print(pktNum)
+        if pktNum == 8:
+            if ApplicationLayer in p:
+                packet = p
+                p.show()
+                # return p
+                break
+        
+    # del packet[TransportControl]
+    # dnp3Save = packet[DNP3].copy()
+    
+    # del packet[DNP3]
+    # tcpSave = packet[TCP].copy()
+    # del packet[TCP]
+    # ipSave = packet[IP].copy()
+    # del packet[IP]
+    # etherSave = packet[Ether].copy()
+    # print(type(etherSave))
+    # print("done")
+    
+    # packet = Ether()/IP()/TCP()/DNP3()
+    # packet[DNP3] = dnp3Save
+    # packet[TCP] = tcpSave
+    # packet[Ether] = etherSave
     
     # Customize packet fields
     # packet[Ether].src = src_mac  # Disrupts
-    print(packet[Ether].dst)
-    print(len(packet[Ether].dst))
-    print(len(packet))
-    packet[Ether].dst = dst_mac  # Disrupts
-    print(packet[Ether].dst)
-    print(len(packet[Ether].dst))
-    print(len(packet.wirelen))
+    # packet[Ether].dst = dst_mac  # Disrupts
+    
     # packet[IP].ihl = 5  # Good if equal to 5 (5 * 4 = 20 bytes)
     # packet[IP].len = 67 # Good with or without
     # packet[IP].id = 61351
@@ -74,7 +107,7 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_st
     # packet[TCP].flags = 'PA'
     # packet[TCP].window = 8192
     # packet[TCP].chksum = 0x2db1
-    # # packet[TCP].urgptr = 0
+    # packet[TCP].urgptr = 0
     # packet[TCP].options = [('NOP', None), ('NOP', None), ('Timestamp', (351399, 246451345))]
 
     # Calculate the checksum and insert after every 16 bytes of data
@@ -104,7 +137,7 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_st
     # packet[ApplicationLayer].Application_Control = tempAppControl
     # packet[ApplicationLayer].Function_Code = 129
     # XShortField("crc", None),
-    # packet.show()
+    packet.show()
 
     return packet
 
@@ -130,6 +163,12 @@ dst_mac = '00:27:90:d4:eb:21'
 pcapList = []
 # Create a packet for a SCADA message to open Relay 1
 # pcapList.append(create_DNP3_packet(src_mac, dst_mac,"172.28.2.10", "172.28.0.11", 0x01, 0x01))
+# pcapList.append(create_DNP3_packet(src_mac, dst_mac,
+#                 "172.28.2.10", "172.28.0.11", 0x01, 0x01))
+pcapFile = "/data/netgen/B/siabmgrB2-1300-filtered.pcap"
+temp = getPacket(pcapFile, 8)
+pcapList.append(temp)
+
 
 # # Create a packet for a SCADA message to close Relay 2
 # pcapList.append(create_DNP3_packet(src_mac, dst_mac, "192.168.0.1", "192.168.0.2", 0x02, 0x00))
@@ -138,6 +177,6 @@ pcapList = []
 # pcapList.append((create_DNP3_packet(src_mac, dst_mac, "192.168.0.1", "192.168.0.2", 0x03, 0x02)))
 
 # Save packets to a pcap file
-# wrpcap("scada_traffic.pcap", pcapList)
-pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
-wrpcap('scada_traffic.pcap', rdpcap(pcapFile))
+wrpcap("scada_traffic.pcap", pcapList)
+# pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
+# wrpcap('scada_traffic.pcap', rdpcap(pcapFile))

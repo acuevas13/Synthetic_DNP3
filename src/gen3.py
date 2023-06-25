@@ -3,6 +3,8 @@ from scapy.all import *
 from cycleDetect import *
 
 DNP3_PORT_NUMBER = 20000  # Set the DNP3 port number used in your packets
+TTL_DEFAULT = 64
+TCP_HEADER_LEN = 8
 
 def getPacket(pcapFile, pktID):
     packet = None
@@ -23,10 +25,10 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_st
     pcapFile = "/data/netgen/B/siabmgrB2-1300-filtered.pcap"
     
     # packet = Ether()/IP()/TCP()/DNP3()
-    packet = getPacket(pcapFile, 8)
-    packet[DNP3].show()
+    ptest = getPacket(pcapFile, 8)
+    ptest.show()
     
-    # Fill in Packet
+    # DNP3
     tempControl = DataLinkLayerControl()
     tempControl.DIR = 1
     tempControl.PRM = 1
@@ -43,10 +45,21 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_st
     tempAppControl.unsolicited = 0
     tempAppControl.sequence = 5
     application_layer = ApplicationLayer(Application_Control=tempAppControl, Function_Code=1)
-
+    
     qualiferField = DataObjectQualifer(reserved=0, PrefixCode=0, RangeCode=6)
     applicationRequest_layer = ApplicationRequest(Object0=60, Var0=2, QualiferField0=qualiferField, Object1=60, Var1=3, QualiferField1=qualiferField, Object2=60, Var2=4, QualiferField2=qualiferField)
-    packet[DNP3] = dnp3_layer / transport_layer / application_layer / applicationRequest_layer
+    # TCP
+    currAck = 3242157396
+    currSeq = 2216652531
+    readOptions = [('NOP', None), ('NOP', None), ('Timestamp', (351402, 175674600))]
+
+    tcp_layer = TCP(sport=1389, dport=20000, seq=currSeq, ack=currAck, dataofs=TCP_HEADER_LEN, flags='PA', options=readOptions)
+    # IP
+    currID = 61353
+    ip_layer = IP(id=currID, flags='DF', ttl=TTL_DEFAULT, src=src_IP, dst=dst_IP)
+    
+    ether_layer = Ether(src=src_mac, dst=dst_mac)
+    packet = ether_layer / ip_layer/ tcp_layer / dnp3_layer / transport_layer / application_layer / applicationRequest_layer
     
     # Pull Packet
     # del packet[TransportControl]
@@ -110,8 +123,8 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_st
 
 
 src_mac = '00:20:75:20:d2:fa'
-dst_mac = '00:27:90:d4:eb:21'
+dst_mac = '00:90:4f:e5:38:a1'
 
 pcapList = []
-pcapList.append(create_DNP3_packet(src_mac, dst_mac,"172.28.2.10", "172.28.0.11", 0x01, 0x01))
+pcapList.append(create_DNP3_packet(src_mac, dst_mac,"172.28.2.10", "172.28.2.20", 0x01, 0x01))
 wrpcap("scada_traffic.pcap", pcapList)
