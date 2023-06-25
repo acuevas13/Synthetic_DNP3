@@ -24,6 +24,7 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_st
     
     # packet = Ether()/IP()/TCP()/DNP3()
     packet = getPacket(pcapFile, 8)
+    packet[DNP3].show()
     
     # Fill in Packet
     tempControl = DataLinkLayerControl()
@@ -33,24 +34,19 @@ def create_DNP3_packet(src_mac, dst_mac, src_IP, dst_IP, function_code, relay_st
     tempControl.FCV = 0
     tempControl.funcation_code_primary = 4
     
-    packet[DNP3] = DNP3(length=17, control=tempControl,
-                        destination=1, source=1, crc=60008)
-    # packet[DNP3].length = 17
-    # packet[DNP3].control = tempControl
-    # packet[DNP3].destination = 1
-    # packet[DNP3].source = 1
-    # packet[DNP3].crc = 60008
+    dnp3_layer = DNP3(start=1380, length=17, control=tempControl, destination=1, source=1) 
+    transport_layer = TransportControl(final=1, first=1, sequence=50)
+    tempAppControl = ApplicationControl()
+    tempAppControl.final=1
+    tempAppControl.first=1
+    tempAppControl.confirm = 0
+    tempAppControl.unsolicited = 0
+    tempAppControl.sequence = 5
+    application_layer = ApplicationLayer(Application_Control=tempAppControl, Function_Code=1)
 
-    # packet[DNP3].crc = 0xfa4a
-    # packet[TransportControl].final = 'set'
-    # packet[TransportControl].first = 'set'
-    # packet[TransportControl].sequence = 20
-    # tempAppControl = ApplicationControl()
-    # tempAppControl.confirm = 0
-    # tempAppControl.unsolicited = 0
-    # tempAppControl.sequence = 11
-    # packet[ApplicationLayer].Application_Control = tempAppControl
-    # packet[ApplicationLayer].Function_Code = 129
+    qualiferField = DataObjectQualifer(reserved=0, PrefixCode=0, RangeCode=6)
+    applicationRequest_layer = ApplicationRequest(Object0=60, Var0=2, QualiferField0=qualiferField, Object1=60, Var1=3, QualiferField1=qualiferField, Object2=60, Var2=4, QualiferField2=qualiferField)
+    packet[DNP3] = dnp3_layer / transport_layer / application_layer / applicationRequest_layer
     
     # Pull Packet
     # del packet[TransportControl]

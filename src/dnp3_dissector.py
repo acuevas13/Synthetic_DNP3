@@ -160,7 +160,7 @@ def crc16DNP(data):
     crcSTR = str(crc16_fn(data))
     print(f"crcSTR!!!: {crcSTR}")
 
-    crcBytes = crcINT.to_bytes((crcINT.bit_length() + 7) // 8, "big")
+    crcBytes = crcINT.to_bytes((crcINT.bit_length() + 7) // 8, "big")[::-1]
     print(f"crcBytes: {crcBytes}")
     return crcBytes
 
@@ -693,6 +693,11 @@ class ApplicationRequest(Packet):
         ByteField("Var3", None),
         PacketField("QualiferField3", DataObjectQualifer(), DataObjectQualifer),
     ]
+    def post_build(self, pkt: bytes, pay: bytes) -> bytes:
+        if not self.Object3 and len(pkt)>3:
+            pkt = pkt[:len(pkt)-3]
+            print(f"Object3: {self.Object3}, pkt: {pkt}")
+        return pkt+pay
     
     def guess_payload_class(self, payload):
         return Packet.guess_payload_class(self, payload)
@@ -765,7 +770,7 @@ class DataLinkLayerControl(Packet):
 class DNP3(Packet):
     name = "DNP3"
     fields_desc = [
-        XShortField("start", DNP3_START_BYTES),
+        XShortField("start", None),
         ByteField("length", None),
         PacketField("control", None, DataLinkLayerControl),
         LEShortField("destination", None),
@@ -796,6 +801,9 @@ class DNP3(Packet):
         if len(pkt) <= 8:
             return pkt
 
+        print(f"POST_BUILD")
+        print(f"pkt: {pkt}")
+        print(f"pay: {pay}")
         dataLinkHeader = pkt[:8]
         dataLinkHeaderChecksum = crc16DNP(dataLinkHeader)  # use only the first 8 octets
         finalPkt = dataLinkHeader + dataLinkHeaderChecksum
@@ -803,23 +811,27 @@ class DNP3(Packet):
         print(f"dataLinkHeaderChecksum: {dataLinkHeaderChecksum}")
         print(f"finalPkt: {finalPkt}")
         
-        dnp3PKT = pkt[8:]
+        # dnp3PKT = pkt[8:] + pay
+        dnp3PKT = pay
         cnk_len = self.data_chunk_len
         pay_len = len(pay)
         pkt_len = len(dnp3PKT)
-        total = pkt_len + pay_len
+        # total = pkt_len + pay_len
+        total = pay_len
         chunks = total // cnk_len  # chunk size
         last_chunk = total % cnk_len
-        
-        if last_chunk > 0:
-            chunks += 1
-        
         print(f"dnp3PKT: {dnp3PKT}")
         print(f"pay_len: {pay_len}")
         print(f"pkt_len: {pkt_len}")
         print(f"total: {total}")
         print(f"chunks: {chunks}")
         print(f"last_chunk: {last_chunk}")
+        
+        if last_chunk > 0:
+            chunks += 1
+            print(f"chunks: {chunks}")
+
+   
 
         # if pay_len == 3 and self.control.DIR == MASTER:
         #     # No IIN in Application layer and empty Payload
@@ -838,8 +850,6 @@ class DNP3(Packet):
         self.data_chunks_crc = []
 
         remaining_pay = pay_len
-        print(f"pay_len: {pay_len}")
-        print(f"chunks: {chunks}")
         for c in range(chunks):
             index = c * cnk_len  # data chunk
             print(
@@ -858,8 +868,9 @@ class DNP3(Packet):
             print(f"self.data_chunks_crc[chunk]: {self.data_chunks_crc[chunk]}")
             payload = payload + self.data_chunks[chunk] + self.data_chunks_crc[chunk]
         self.show_data_chunks()  # --DEBUGGING
-        print(f"final: \n dnp3PKT: {dnp3PKT}, payload: {payload}, dnp3PKT+payload: {dnp3PKT+payload}")
+        print(f"payload: {payload}")
         finalPkt += payload
+        print(f"finalPkt: {finalPkt}")
         return finalPkt
         
     def guess_payload_class(self, payload):
