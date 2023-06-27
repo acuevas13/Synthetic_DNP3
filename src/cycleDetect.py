@@ -248,10 +248,10 @@ def find_periodic_requests(tokenized_flow, N, epsilon, dur_thr):
 
     
 if __name__ == '__main__':
-    # pcapFile = "/data/netgen/B/testB2-1300-filtered.pcap"
+    pcapFile = "/data/netgen/B/siabmgrB2-1300-filtered.pcap"
     # pcapFile = "/data/netgen/siabmgrA5/siabmgrA5-20191030-174849.pcap"
     # pcapFile = "../B/siabmgrB2-1300-filtered.pcap"
-    pcapFile = "../B/siabmgrA5-20191030-174849.pcap"
+    # pcapFile = "../B/siabmgrA5-20191030-174849.pcap"
     t1 = time.time()
     tokenized = multiTokenizer(pcapFile)
     print(f"Tokenize Time: {time.time()-t1}")

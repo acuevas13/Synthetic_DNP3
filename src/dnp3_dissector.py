@@ -793,9 +793,9 @@ class DNP3(Packet):
         self.data_chunks.append(chunk)
         self.data_chunks_crc.append(checkSum)
 
-    def post_dissect(self, s: bytes):
-        print(f"s: {s}")
-        return s
+    # def post_dissect(self, s: bytes):
+    #     print(f"s: {s}")
+    #     return s
     
     def post_build(self, pkt, pay):
         if len(pkt) <= 8:
